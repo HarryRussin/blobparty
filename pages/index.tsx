@@ -1,84 +1,199 @@
 import type { NextPage } from 'next'
 import Head from 'next/head'
 import Image from 'next/image'
+import { useEffect } from 'react'
+import { auth, db } from '../firebase'
+import { onAuthStateChanged, signInAnonymously, User } from 'firebase/auth'
+import { useState } from 'react'
+import { randomFromArray } from '../scripts/globals'
+import {
+  DatabaseReference,
+  onChildAdded,
+  onDisconnect,
+  onValue,
+  ref,
+  set,
+} from 'firebase/database'
+import KeyPressListener from '../scripts/KeyPressListener'
+
+interface PlayerData {
+  name: string
+  id: string
+  color: string
+  x: number
+  y: number
+  coins: number
+  direction?: string
+}
+
+interface Player {
+  key: PlayerData
+}
 
 const Home: NextPage = () => {
+  const [playerid, setplayerid] = useState('')
+  const [playerRef, setplayerRef] = useState<DatabaseReference>()
+  const [players, setplayers] = useState<any>({})
+  const [name, setname] = useState('')
+
+  const playerColors = ['blue', 'red', 'orange', 'yellow', 'green', 'purple']
+
+  const signIn = () => {
+    onAuthStateChanged(auth, (user) => user && addUserDetails(user))
+
+    signInAnonymously(auth).catch((error) => {
+      console.log(error.code, error.message)
+    })
+
+    return
+  }
+
+  const createName = () => {
+    let prefix = randomFromArray([
+      'EPIC',
+      'MASSIVE',
+      'TINY',
+      'UWU',
+      'MUSHROOM',
+      'BORGOR',
+      'SQUEAKY',
+    ])
+    let suffix = randomFromArray([
+      'COCK',
+      'WEINER',
+      'CAT',
+      'TURTLE',
+      'MUSHROOM',
+      'LEAF',
+      'WHALE',
+      'PUMPKIN',
+      'BOOB',
+    ])
+    setname(`${prefix} ${suffix}`)
+    return `${prefix} ${suffix}`
+  }
+
+  const addUserDetails = (user: User) => {
+    console.log(user)
+    if (user) {
+      console.log('Signed in, Welcome!')
+      let pref = ref(db, `players/${user?.uid}`)
+      let p = {
+        name: createName(),
+        id: user.uid,
+        color: randomFromArray(playerColors),
+        x: 6,
+        y: 9,
+        coins: 22,
+        direction: randomFromArray(['left', 'right']),
+      }
+
+      setplayerid(user.uid)
+      setplayerRef(pref)
+      players[p.id] = p
+      setplayers(players)
+
+      set(pref, p)
+
+      onDisconnect(pref).remove()
+
+      initGame(user.uid)
+    } else {
+      console.log('Error signing in, please refresh the page :(')
+    }
+  }
+
+  const initGame = (uid: string) => {
+    new KeyPressListener('ArrowUp', () => {
+      handleMovement(0, -1, uid)
+    })
+    new KeyPressListener('ArrowDown', () => {
+      handleMovement(0, 1, uid)
+    })
+    new KeyPressListener('ArrowLeft', () => {
+      handleMovement(-1, 0, uid)
+    })
+    new KeyPressListener('ArrowRight', () => {
+      handleMovement(1, 0, uid)
+    })
+
+    const allPlayersRef = ref(db, 'players')
+    const allCoinsRef = ref(db, 'coins')
+
+    onValue(allPlayersRef, (snapshot) => {
+      const playerchange = snapshot.val()
+      setplayers(playerchange)
+    })
+
+    onChildAdded(allPlayersRef, (snapshot) => {
+      const addedPlayer: PlayerData = snapshot.val()
+      let playerscop = JSON.parse(JSON.stringify(players))
+      playerscop[addedPlayer.id] = addedPlayer
+
+      setplayers(playerscop)
+      if (addedPlayer.id === playerid) {
+        console.log('hi u')
+      }
+    })
+  }
+
+  const handleMovement = (
+    xchange: number = 0,
+    ychange: number = 0,
+    uid: string
+  ) => {
+    let playerscop = JSON.parse(JSON.stringify(players))
+
+    let newx = players[uid].x += xchange
+    let newy = players[uid].y += ychange
+
+    console.log(xchange, ychange)
+
+    if (true) {
+      playerscop[uid].y = newy
+      playerscop[uid].x = newx
+
+      if (xchange === 1) {
+        playerscop[uid].direction = 'right'
+      }
+      if (xchange === -1) {
+        playerscop[uid].direction = 'left'
+      }
+    }
+    set(ref(db, 'players/' + uid), playerscop[uid])
+  }
+
+  useEffect(() => {
+    signIn()
+  }, [])
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center py-2">
-      <Head>
-        <title>Create Next App</title>
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-
-      <main className="flex w-full flex-1 flex-col items-center justify-center px-20 text-center">
-        <h1 className="text-6xl font-bold">
-          Welcome to{' '}
-          <a className="text-blue-600" href="https://nextjs.org">
-            Next.js!
-          </a>
-        </h1>
-
-        <p className="mt-3 text-2xl">
-          Get started by editing{' '}
-          <code className="rounded-md bg-gray-100 p-3 font-mono text-lg">
-            pages/index.tsx
-          </code>
-        </p>
-
-        <div className="mt-6 flex max-w-4xl flex-wrap items-center justify-around sm:w-full">
-          <a
-            href="https://nextjs.org/docs"
-            className="mt-6 w-96 rounded-xl border p-6 text-left hover:text-blue-600 focus:text-blue-600"
+    <div className="game-container">
+      {Object.keys(players).map((player: any) => {
+        const left = 16 * players[player].x
+        const top = 16 * players[player].y - 3
+        return (
+          <div
+            data-color={players[player].color}
+            data-direction={players[player].direction}
+            key={players[player].id}
+            style={{ transform: `translate3d(${left}px,${top}px,0)` }}
+            className={`Character grid-cell ${
+              players[player].id === playerid && 'you'
+            }`}
           >
-            <h3 className="text-2xl font-bold">Documentation &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Find in-depth information about Next.js features and API.
-            </p>
-          </a>
-
-          <a
-            href="https://nextjs.org/learn"
-            className="mt-6 w-96 rounded-xl border p-6 text-left hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Learn &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Learn about Next.js in an interactive course with quizzes!
-            </p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/canary/examples"
-            className="mt-6 w-96 rounded-xl border p-6 text-left hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Examples &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Discover and deploy boilerplate example Next.js projects.
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/import?filter=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className="mt-6 w-96 rounded-xl border p-6 text-left hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Deploy &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
-        </div>
-      </main>
-
-      <footer className="flex h-24 w-full items-center justify-center border-t">
-        <a
-          className="flex items-center justify-center gap-2"
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-        </a>
-      </footer>
+            <div className="Character_shadow grid-cell"></div>
+            <div className="Character_sprite grid-cell"></div>
+            <div className="Character_name-container ">
+              <span className="Character_name">{players[player].name}</span>
+              <span className="Character_coins">{players[player].coins}</span>
+            </div>
+            {players[player].id === playerid && (
+              <div className="Character_you-arrow"></div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
