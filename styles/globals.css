@@ -59,7 +59,7 @@
     text-transform: uppercase;
   }
   input[type="text"]:focus {
-    border-color: #f000ff;
+    border-color: #c800ff;
   }
   
   button {
