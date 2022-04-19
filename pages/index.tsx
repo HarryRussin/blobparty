@@ -166,6 +166,9 @@ const Home: NextPage = () => {
       x,
       y,
     })
+    let coinscop = JSON.parse(JSON.stringify(coins))
+    coinscop[getKeyString(x,y)] = {x,y}
+    setcoins(coinscop)
 
     const timeouts = [2000, 3000, 4000, 5000]
     setTimeout(() => {
@@ -173,13 +176,15 @@ const Home: NextPage = () => {
     }, randomFromArray(timeouts))
   }
 
-  const tryToEat = (x: number, y: number,uid:string) => {
+  const tryToEat = (x: number, y: number, uid: string) => {
     if (coins[getKeyString(x, y)]) {
       console.log('collision')
-      console.log(getKeyString(x,y))
-      console.log(players[uid]);
-      
-      players[uid].coins+=1
+      console.log(getKeyString(x, y))
+      console.log(players[uid])
+
+      players[uid].coins += 1
+      delete coins[getKeyString(x,y)]
+      setcoins(coins)
       setplayers(players)
       remove(ref(db, 'coins/' + getKeyString(x, y)))
       update(ref(db, 'players/' + uid), {
@@ -240,16 +245,17 @@ const Home: NextPage = () => {
       let coin = snapshot.val()
       let key = getKeyString(coin.x, coin.y)
       coins[key] = { x: coin.x, y: coin.y }
-      console.log(coins);
-      
+      console.log(coins)
+
       setcoins(coins)
     })
 
     onChildRemoved(allCoinsRef, (snapshot) => {
       const { x, y }: any = snapshot.val()
       const removedKey = getKeyString(x, y)
-      delete coins[removedKey]
-      setcoins(coins)
+      let coinscop = JSON.parse(JSON.stringify(coins))
+      delete coinscop[removedKey]
+      setcoins(coinscop)
     })
 
     onChildRemoved(allPlayersRef, (snapshot) => {
@@ -310,7 +316,7 @@ const Home: NextPage = () => {
         y: players[uid].y,
         direction: players[uid].direction,
       })
-      tryToEat(newx, newy,uid)
+      tryToEat(newx, newy, uid)
     }
   }
 
@@ -346,7 +352,7 @@ const Home: NextPage = () => {
             </div>
           )
         })}
-        {Object.keys(coins).map((coin: any) => {          
+        {Object.keys(coins).map((coin: any) => {
           const left = 16 * coins[coin].x
           const top = 16 * coins[coin].y - 3
           return (
