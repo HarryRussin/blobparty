@@ -1,7 +1,7 @@
 import type { NextPage } from 'next'
 import Head from 'next/head'
 import Image from 'next/image'
-import { useEffect } from 'react'
+import { FormEvent, useEffect } from 'react'
 import { auth, db } from '../firebase'
 import { onAuthStateChanged, signInAnonymously, User } from 'firebase/auth'
 import { useState } from 'react'
@@ -11,14 +11,16 @@ import {
   onChildRemoved,
   onDisconnect,
   onValue,
+  push,
   ref,
   remove,
+  serverTimestamp,
   set,
   update,
 } from 'firebase/database'
 import KeyPressListener from '../scripts/KeyPressListener'
 import { useRef } from 'react'
-import {ChatIcon, CheckIcon, XIcon} from '@heroicons/react/outline'
+import { ChatIcon, CheckIcon, XIcon } from '@heroicons/react/outline'
 
 interface PlayerData {
   name: string
@@ -41,18 +43,19 @@ const Home: NextPage = () => {
   const [coins, setcoins] = useState<any>({})
   const [typing, settyping] = useState(false)
   const [openText, setopenText] = useState(false)
+  const [messages, setmessages] = useState<any>([])
   const messageInputRef = useRef(null)
 
   const typingStateRef = useRef(typing)
-  const setTypingState = (data:boolean) => {
-    typingStateRef.current = data;
-    settyping(data);
-  };
+  const setTypingState = (data: boolean) => {
+    typingStateRef.current = data
+    settyping(data)
+  }
   const openTextStateRef = useRef(openText)
-  const setOpenTextState = (data:boolean) => {
-    openTextStateRef.current = data;
-    setopenText(data);
-  };
+  const setOpenTextState = (data: boolean) => {
+    openTextStateRef.current = data
+    setopenText(data)
+  }
 
   const playerColors = ['blue', 'red', 'orange', 'yellow', 'green', 'purple']
   const mapData = {
@@ -182,7 +185,7 @@ const Home: NextPage = () => {
       y,
     })
     let coinscop = JSON.parse(JSON.stringify(coins))
-    coinscop[getKeyString(x,y)] = {x,y}
+    coinscop[getKeyString(x, y)] = { x, y }
     setcoins(coinscop)
 
     const timeouts = [2000, 3000, 4000, 5000]
@@ -198,7 +201,7 @@ const Home: NextPage = () => {
       console.log(players[uid])
 
       players[uid].coins += 1
-      delete coins[getKeyString(x,y)]
+      delete coins[getKeyString(x, y)]
       setcoins(coins)
       setplayers(players)
       remove(ref(db, 'coins/' + getKeyString(x, y)))
@@ -260,11 +263,19 @@ const Home: NextPage = () => {
       }
     })
 
+    onChildAdded(ref(db,'messages'),(snapshot)=>{
+      const messageChanged = snapshot.val()
+      console.log(messageChanged);
+      messages.push(messageChanged)
+      //@ts-ignore
+      setmessages(messages)
+    })
+
     onChildAdded(allCoinsRef, (snapshot) => {
       let coin = snapshot.val()
       let key = getKeyString(coin.x, coin.y)
       coins[key] = { x: coin.x, y: coin.y }
-      console.log(coins)
+      console.log(coins);
 
       setcoins(coins)
     })
@@ -287,7 +298,7 @@ const Home: NextPage = () => {
     placeCoin()
   }
 
-  const toggleOpenText = ()=>{
+  const toggleOpenText = () => {
     if (typingStateRef.current) {
       return
     }
@@ -297,7 +308,7 @@ const Home: NextPage = () => {
   }
 
   useEffect(() => {
-    openTextStateRef.current?setTypingState(true):setTypingState(false)
+    openTextStateRef.current ? setTypingState(true) : setTypingState(false)
   }, [openTextStateRef.current])
 
   const changeColor = () => {
@@ -323,6 +334,23 @@ const Home: NextPage = () => {
       return false
     }
     return true
+  }
+
+  const sendMessage = (e: FormEvent) => {
+    e.preventDefault()
+    //@ts-ignore
+    if (!messageInputRef.current.value||!playerid) {
+      return
+    }
+    push(ref(db, 'messages'), {
+      senderid: playerid,
+      //@ts-ignore
+      message: messageInputRef.current.value,
+      pastcolor:players[playerid].color,
+      pastname:players[playerid].name
+    })
+    //@ts-ignore
+    messageInputRef.current.value = ''
   }
 
   const handleMovement = (
@@ -394,7 +422,7 @@ const Home: NextPage = () => {
             <div
               key={coin}
               style={{ transform: `translate3d(${left}px,${top}px,0)` }}
-              className='absolute'
+              className="absolute"
             >
               <div className="Coin_shadow grid-cell"></div>
               <div className="Coin_sprite grid-cell"></div>
@@ -406,12 +434,14 @@ const Home: NextPage = () => {
         <div className="">
           <label htmlFor="player-name">Your Name</label>
           <input
-          disabled={openTextStateRef.current}
+            disabled={openTextStateRef.current}
             defaultValue={name}
-            className='name'
-            onChange={(e) => {setname(e.target.value || createName())}}
-            onFocus={()=>setTypingState(true)}
-            onBlur={()=>setTypingState(false)}
+            className="name"
+            onChange={(e) => {
+              setname(e.target.value || createName())
+            }}
+            onFocus={() => setTypingState(true)}
+            onBlur={() => setTypingState(false)}
             type="text"
             maxLength={100}
             id="player-name"
@@ -421,12 +451,44 @@ const Home: NextPage = () => {
           <button onClick={changeColor}>Change Color</button>
         </div>
       </div>
-      <div className={`absolute flex items-end ${openTextStateRef.current?'h-[70%] p-2':'h-[0%]'} transition-all  w-full top-0 right-0`}>
-        <div className={`bg-black h-full w-full absolute top-0 left-0 opacity-40`}></div>
+      <div
+        className={`absolute flex items-end ${
+          openTextStateRef.current ? 'h-[70%] p-2' : 'h-[0%]'
+        } top-0  right-0 w-full transition-all`}
+      >
+        <div
+          className={`absolute top-0 left-0 h-full w-full bg-black opacity-70`}
+        ></div>
 
         <div className="z-10 w-full">
-        <input autoFocus ref={messageInputRef} type="text" placeholder='Start Typing...' className='appearance-none w-full sm:w-[80%] p-2 pb-0 focus:outline-none text-white bg-transparent border-b-[5px] border-dashed placeholder:text-white border-b-white'/>
-        <div onClick={()=>setOpenTextState(!openTextStateRef.current)} className="absolute ease-in-out right-5 top-0 text-2xl text-white bg-yellow-700 h-10 w-8 rounded-b-md transition-all hover:h-12 active:h-8 group">{openTextStateRef.current?<XIcon className='transition-all group-hover:pt-2 group-active:pt-0 '/>:<ChatIcon className='transition-all px-1 pt-1 group-hover:pt-2 group-active:pt-0 '/>}</div>
+          <div className="overflow-y-scroll">
+            {messages.map((message:{message:string,senderid:string,pastcolor:string,pastname:string},i:number)=>{
+              return(
+              <p key={i} className='text-white'>
+                <span className='font-bold' style={{color:`${players[message.senderid]?players[message.senderid].color:message.pastcolor}`}}>{players[message.senderid]?players[message.senderid].name:message.pastname}:</span><span> {message.message}</span>
+              </p>
+              )
+            })}
+          </div>
+          <form onSubmit={(e)=>sendMessage(e)}>
+            <input
+              autoFocus
+              ref={messageInputRef}
+              type="text"
+              placeholder="Start Typing..."
+              className="w-full appearance-none border-b-[5px] border-dashed border-b-white bg-transparent p-2 pb-0 text-white placeholder:text-white focus:outline-none sm:w-[80%]"
+            />
+          </form>
+          <div
+            onClick={() => setOpenTextState(!openTextStateRef.current)}
+            className="group absolute right-5 top-0 h-10 w-8 rounded-b-md bg-yellow-700 text-2xl text-white transition-all ease-in-out hover:h-12 active:h-8"
+          >
+            {openTextStateRef.current ? (
+              <XIcon className="transition-all group-hover:pt-2 group-active:pt-0 " />
+            ) : (
+              <ChatIcon className="px-1 pt-1 transition-all group-hover:pt-2 group-active:pt-0 " />
+            )}
+          </div>
         </div>
       </div>
     </>
